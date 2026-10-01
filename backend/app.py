@@ -3,8 +3,28 @@ import requests
 import xml.etree.ElementTree as ET
 from flask import Flask, jsonify
 import mysql.connector
+import time
+from flask import request
 
 app = Flask(__name__)
+
+@app.before_request
+def start_timer():
+    request.start_time = time.time()
+
+@app.after_request
+def log_request(response):
+    duration_ms = round((time.time() - request.start_time) * 1000, 2)
+
+    app.logger.info(
+        "path=%s method=%s status=%s duration_ms=%s",
+        request.path,
+        request.method,
+        response.status_code,
+        duration_ms
+    )
+
+    return response
 
 def get_db_connection():
     return mysql.connector.connect(
