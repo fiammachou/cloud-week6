@@ -22,6 +22,21 @@ def home():
 def status():
     return jsonify({"message": "Backend API is working"})
 
+@app.route("/healthz")
+def healthz():
+    return jsonify({"status": "alive"}), 200
+
+@app.route("/readyz")
+def readyz():
+    try:
+        connection = get_db_connection()
+        connection.close()
+        return jsonify({"status": "ready"}), 200
+    except Exception as e:
+        return jsonify({
+            "status": "not ready",
+            "error": str(e)
+        }), 503
 @app.route("/visits")
 def visits():
     connection = get_db_connection()
