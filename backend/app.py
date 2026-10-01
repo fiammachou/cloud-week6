@@ -7,6 +7,7 @@ import time
 from flask import request
 
 app = Flask(__name__)
+app.logger.setLevel("INFO")
 
 @app.before_request
 def start_timer():
