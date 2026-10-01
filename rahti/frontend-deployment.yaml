@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: week5-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: week5-frontend
+  template:
+    metadata:
+      labels:
+        app: week5-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: fivich/lemp-frontend:1.1.1
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080

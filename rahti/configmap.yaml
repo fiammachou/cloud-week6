@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: week5-app-config
+data:
+  DB_HOST: "week5-mysql"
+  DB_USER: "clouduser"
+  DB_NAME: "clouddb"

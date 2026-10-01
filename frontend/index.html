@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Cloud Services - Week 5</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 950px;
+            margin: 40px auto;
+            padding: 0 25px;
+            line-height: 1.6;
+            color: #222;
+        }
+
+        h1 {
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+        }
+
+        h2 {
+            margin-top: 45px;
+        }
+
+        code {
+            background-color: #eeeeee;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+
+        .demo {
+            background-color: #f4f4f4;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 25px 0;
+        }
+
+        figure {
+            margin: 25px 0;
+        }
+
+        .screenshot {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ccc;
+        }
+
+        figcaption {
+            margin-top: 8px;
+            font-size: 0.9em;
+            color: #555;
+        }
+
+        .sources p {
+            margin-bottom: 22px;
+        }
+
+        a {
+            word-break: break-word;
+        }
+
+	.section-images {
+        margin-top: 25px;
+    	}
+
+    	.section-images img {
+        	display: block;
+        	max-width: 100%;
+        	height: auto;
+        	margin-bottom: 20px;
+        	border: 1px solid #ccc;
+    	}
+
+    </style>
+</head>
+
+
+<body>
+
+    <h1>Cloud Services - Week 4</h1>
+
+    <p><strong>Application version: 1.0.3</strong></p>
+
+
+    <div class="demo">
+        <h2>Live database information</h2>
+
+        <p>
+            Number of visits:
+            <strong>
+                <span id="visits">Loading...</span>
+            </strong>
+        </p>
+    </div>
+
+
+    <!-- ================================================== -->
+    <!-- 1. APPLICATION DESCRIPTION -->
+    <!-- ================================================== -->
+
+    <h2>1. Application description</h2>
+
+    <p>
+        This week I created a 3-layer web application (frontend, backend and database).
+        In the frontend I used Nginx, which is used to show the page to the user and
+        obtain the information from the backend. In the backend layer I used Python
+        Flask/Gunicorn, where the application logic is located. It offers a REST API
+        that reads and writes data from the third layer. MySQL is used as the database,
+        where the data is stored.
+    </p>
+
+    <p>
+        On the other hand, I also implemented a visit counter. When the page is loaded
+        or refreshed, the backend increments the counter in MySQL and returns the
+        updated value. In Rahti, each component runs in its own Pod/Deployment.
+        From the Internet, only the frontend is accessible through a Route. The backend
+        and MySQL communicate with it through Services inside the internal network.
+    </p>
+
+    <div class="section-images">
+    	<img src="images/application.png" class="screenshot">
+    </div>
+
+
+    <!-- ================================================== -->
+    <!-- 2. COMMUNICATION -->
+    <!-- ================================================== -->
+
+    <h2>2. Frontend → Backend → Database communication</h2>
+
+    <p>
+        The way these three components communicate is the following: the user accesses
+        the frontend through the public Rahti Route using Nginx. When the page needs
+        to access the counter, a request is made to <code>/api/visits</code>, where
+        Nginx redirects the request to the internal backend Service
+        <code>week4-backend:8000</code>.
+    </p>
+
+    <p>
+        On the other hand, the backend is made with Flask and connects to MySQL using
+        <code>DB_HOST=week4-mysql</code>. The backend performs a write operation
+        <code>UPDATE visits SET count = count + 1</code> and then performs a read
+        operation <code>SELECT count FROM visits</code>. The value is returned in JSON
+        and the frontend shows that value on the web page.
+    </p>
+
+    <p>
+        I tested it and the value increases not only when loading the page, but also
+        when refreshing it.
+    </p>
+
+    <div class="section-images">
+    	<img src="images/apartado2 (1).png" class="screenshot">
+    	<img src="images/apartado2 (2).png" class="screenshot">
+    	<img src="images/apartado2 (3).png" class="screenshot">
+     </div>
+
+    <!-- ================================================== -->
+    <!-- 3. DATABASE PERSISTENCE -->
+    <!-- ================================================== -->
+
+    <h2>3. Database persistence</h2>
+
+    <p>
+        To prevent MySQL data from being lost when the Pod disappears, I created a
+        <strong>PersistentVolumeClaim (PVC)</strong> in Rahti called
+        <code>week4-mysql-data</code>, which is mounted in MySQL as
+        <code>/var/lib/mysql</code>. At first, the PVC was in Pending state and it
+        changed to Bound when the MySQL Pod started using it.
+    </p>
+
+    <p>
+        For example, to test persistence, I first checked the visit counter and it was
+        at 3. Then I deleted the MySQL Pod. Rahti/Kubernetes automatically created a
+        new MySQL Pod, and when I opened the application again, the counter changed
+        to 4 and continued increasing. This demonstrates that the data was stored in
+        persistent storage and not only inside the Pod. The Pod can be replaced, but
+        the PVC continues to exist and can be mounted again.
+    </p>
+
+
+    <!-- ================================================== -->
+    <!-- 4. POD RECOVERY -->
+    <!-- ================================================== -->
+
+    <h2>4. Pod recovery</h2>
+
+    <p>
+        When I manually deleted the backend Pod, it was managed by a Deployment.
+        Because one replica was configured, after I deleted the Pod it was automatically
+        replaced by a new one. This happened because Kubernetes/OpenShift tries to
+        maintain the desired state defined by the Deployment. Since the Deployment
+        specified that one replica should exist, when the Pod disappeared another one
+        was automatically created.
+    </p>
+
+
+    <!-- ================================================== -->
+    <!-- 5. SCALING -->
+    <!-- ================================================== -->
+
+    <h2>5. Scaling</h2>
+
+    <p>
+        At the beginning, the backend had 1 replica, and then I changed the Deployment
+        to use 3 replicas with the command
+        <code>oc scale deployment week4-backend --replicas=3</code>.
+        In this case, Rahti automatically created three backend Pods. To check this,
+        I used <code>get pods</code> and all three were in Running state.
+    </p>
+
+    <p>
+        The frontend continued working without needing to know the IP address of each
+        Pod. This works thanks to the Service, which provides a stable name and
+        distributes the requests between the available Pods.
+    </p>
+
+    <p>
+        This was only a test, so later I changed it back to one replica to avoid using
+        unnecessary resources.
+    </p>
+
+    
+    <!-- ================================================== -->
+    <!-- 6. ROLLING UPDATE -->
+    <!-- ================================================== -->
+
+    <h2>6. Application update / Rolling update</h2>
+
+    <p>
+        When I wanted to update the application to another version, I only had to
+        change the application version in the frontend and build a new image.
+    </p>
+
+    <p>
+        I uploaded it to Docker Hub and then updated the Rahti Deployment to use the
+        new image. During the process I could observe the rolling update with
+        <code>oc get pods -w</code>. Rahti first created a new Pod with version 1.0.1.
+        When the new Pod was in Running state, the old Pod started terminating.
+        Finally, I could see <code>Application version: 1.0.1</code> on the public
+        website.
+    </p>
+
+    
+    <!-- ================================================== -->
+    <!-- 7. PROBLEMS AND SOLUTIONS -->
+    <!-- ================================================== -->
+
+    <h2>7. Problems and solutions</h2>
+
+    <p>
+        At the beginning, Docker gave an error because the Docker daemon was not
+        running. Later I discovered that WSL 2, which Docker Desktop needed, was not
+        configured.
+    </p>
+
+    <p>
+        Later, Windows did not recognize the <code>oc</code> command. The problem was
+        that my <code>oc.exe</code> was not in the correct PATH because the last time
+        I used it, in Week 2, I had saved it in another folder.
+    </p>
+
+    <p>
+        When I moved from the local environment to Rahti, Nginx was still pointing to
+        the backend using <code>backend:8000</code>, but in Rahti the Service was called
+        <code>week4-backend:8000</code>.
+    </p>
+
+    <div class="section-images">
+    	<img src="images/apartado 7 (2).png" class="screenshot">
+    	<img src="images/APARTADO 7.png" class="screenshot">
+    	<img src="images/apartado7.png" class="screenshot">
+    </div>
+
+
+    <!-- ================================================== -->
+    <!-- 8. COMPARISON -->
+    <!-- ================================================== -->
+
+    <h2>8. Rahti vs Docker Compose + cPouta</h2>
+
+    <p>
+        The main differences between them are that with Docker Compose + cPouta,
+        you manage a Linux virtual machine and run the containers inside that VM.
+        You have more direct control over the operating system, Docker, ports and
+        files, but you also have to manage more things manually, such as installing
+        Docker, maintaining the VM, configuring the firewall and updating services.
+    </p>
+
+    <p>
+        On the other hand, with Rahti/OpenShift you do not directly manage a VM.
+        You define resources such as Deployments, Services, Routes, ConfigMaps,
+        Secrets and PVCs. Rahti also takes care of running and managing the Pods.
+        If a Pod fails, it can recreate it automatically. Scaling from 1 to 3 replicas
+        is much easier, Services allow components to communicate without depending
+        on specific IP addresses, Secrets and ConfigMaps separate configuration and
+        credentials from the code, and rolling updates allow the application to be
+        updated in a more controlled way.
+    </p>
+
+    <p>
+        Docker Compose seemed simpler to me for a small and local application because
+        Rahti has more concepts to learn, but Rahti offers better orchestration,
+        recovery, scalability and management for cloud applications.
+    </p>
+
+    <!-- ================================================== -->
+    <!-- 9. PART A - QUESTIONS -->
+    <!-- ================================================== -->
+
+    <h2>9. Part A - Questions</h2>
+
+    <h3>List some public APIs and describe a realistic integration you could add to the backend you builtin week 4 </h3>
+    <p>
+         A public API allows an application to automatically retrieve information from another source. The data isn't copied; instead, the backend sends requests to receive the specific data it wants to display on the page. On this page, I used the Finnish Meteorological Institute's (FMI) public API, which publishes weather data, and my backend sends requests to it in order to display the data.
+    </p>
+
+    <h3>What are open data portals and why does choosing the right open-data format matter for reuse?</h3>
+    <p>
+        An open data portal is a platform where public agencies, institutions, or other public organizations post the data they hold so that people outside these entities can easily and automatically access and use it, since it is in an open format and its machine-readable nature greatly facilitates its reuse. 
+    </p>
+
+    <h3>What is YAML and why has it became the default configuration format for Kubernetes/Rahti manifests?</h3>
+    <p>
+        YAML is a data serialization format designed to make it easy for people to read and write data. In Kubernetes/OpenShift, it is widely used to write manifests that describe how we want resources to be configured. An interesting comparison with JSON is that both can represent virtually the same information. In fact, Kubernetes accepts both YAML and JSON manifests, and the Kubernetes API uses JSON in its requests. YAML is simply often more convenient for a person to write configuration files.
+    </p>
+
+    <h3>What is a Web Application Firewall and what kind of attacks does it defend against? Where would you place one in the three-container architecture you built in WEEK 4 </h3>
+    <p>
+       It is a firewall specialized in HTTP/HTTPS web application traffic. It examines requests sent to an application and can block requests that appear to be malicious. A WAF does not replace code-level security. It is still necessary to validate inputs, protect passwords, keep dependencies up to date, etc.; it simply adds another layer of protection.
+
+    </p>
+
+
+    <!-- ================================================== -->
+    <!-- 10. PART B - PUBLIC API -->
+    <!-- ================================================== -->
+
+    <h2>10. Part B - Public API extension</h2>
+
+    <p>
+        Starting from the web page developed the previous week, I made a copy of it and started it with Docker Compose, changing the name to Week 5. For this week's assignment, I chose the Public API / Open Data option, using the public API from the Finnish Meteorological Institute (FMI).
+
+As a first step, I added the requests library to the Flask backend so I could make HTTP requests to an external API. I created a new endpoint in Flask called weather and tested if it could return the complete XML. I made the query using temperature and windspeedms.
+
+Then I configured Nginx so the routes /api/visits and /api/weather were correctly redirected to the Flask backend. I updated the HTML so I could see the data on the page. The frontend uses JavaScript with fetch('/api/weather') to get the data from the backend.
+
+I checked that both visits and weather responded with status 200. Finally, I checked that the page works and shows both the visit counter and the weather data.
+    </p>
+
+    <div class="demo">
+        <h3>Weather in Oulu</h3>
+
+        <p>
+            Temperature:
+            <strong><span id="temperature">Loading...</span> °C</strong>
+        </p>
+
+        <p>
+            Wind speed:
+            <strong><span id="wind">Loading...</span> m/s</strong>
+        </p>
+
+        <p>
+            Forecast time:
+            <strong><span id="weather-time">Loading...</span></strong>
+        </p>
+    </div>
+
+
+    <!-- ================================================== -->
+    <!-- 11. SOURCES -->
+    <!-- ================================================== -->
+
+    <h2>11. Sources</h2>
+
+    <div class="sources">
+
+        <p>
+            <strong>CSC – Rahti Documentation: Usage</strong><br>
+
+            <a href="https://docs.csc.fi/cloud/rahti/usage/" target="_blank">
+                https://docs.csc.fi/cloud/rahti/usage/
+            </a><br>
+
+            General information about deploying and managing applications in Rahti.
+        </p>
+
+
+        <p>
+            <strong>CSC – Rahti Networking</strong><br>
+
+            <a href="https://docs.csc.fi/cloud/rahti/networking/" target="_blank">
+                https://docs.csc.fi/cloud/rahti/networking/
+            </a><br>
+
+            Used for Services, internal communication between Pods, and Routes for
+            exposing the frontend.
+        </p>
+
+
+        <p>
+            <strong>CSC – Rahti FAQ / Persistent Storage</strong><br>
+
+            <a href="https://docs.csc.fi/cloud/rahti/reference/faq/" target="_blank">
+                https://docs.csc.fi/cloud/rahti/reference/faq/
+            </a><br>
+
+            Used for PersistentVolumeClaims, standard-csi storage and Routes.
+        </p>
+
+
+        <p>
+            <strong>Kubernetes – Deployments</strong><br>
+
+            <a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/" target="_blank">
+                https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+            </a><br>
+
+            Used for Deployments, replicas, Pod recovery, scaling and rolling updates.
+        </p>
+
+
+        <p>
+            <strong>Kubernetes – Services</strong><br>
+
+            <a href="https://kubernetes.io/docs/concepts/services-networking/service/" target="_blank">
+                https://kubernetes.io/docs/concepts/services-networking/service/
+            </a><br>
+
+            Used to understand how frontend, backend and MySQL communicate without
+            depending on individual Pod IP addresses.
+        </p>
+
+
+        <p>
+            <strong>Kubernetes – ConfigMaps</strong><br>
+
+            <a href="https://kubernetes.io/docs/concepts/configuration/configmap/" target="_blank">
+                https://kubernetes.io/docs/concepts/configuration/configmap/
+            </a><br>
+
+            Used for storing non-sensitive configuration such as database host,
+            username and database name.
+        </p>
+
+
+        <p>
+            <strong>Kubernetes – Secrets</strong><br>
+
+            <a href="https://kubernetes.io/docs/concepts/configuration/secret/" target="_blank">
+                https://kubernetes.io/docs/concepts/configuration/secret/
+            </a><br>
+
+            Used for storing sensitive information such as database passwords.
+        </p>
+
+
+        <p>
+            <strong>Docker – Docker Compose</strong><br>
+
+            <a href="https://docs.docker.com/compose/" target="_blank">
+                https://docs.docker.com/compose/
+            </a><br>
+
+            Used for the local three-container application and Docker Compose configuration.
+        </p>
+
+
+        <p>
+            <strong>Docker – Environment variables in Compose</strong><br>
+
+            <a href="https://docs.docker.com/compose/how-tos/environment-variables/" target="_blank">
+                https://docs.docker.com/compose/how-tos/environment-variables/
+            </a><br>
+
+            Used for the .env configuration in the local application.
+        </p>
+
+
+        <p>
+            <strong>Kubernetes – Update a Deployment Without Downtime</strong><br>
+
+            <a href="https://kubernetes.io/docs/tasks/run-application/update-deployment-rolling/" target="_blank">
+                https://kubernetes.io/docs/tasks/run-application/update-deployment-rolling/
+            </a><br>
+
+            Used for the application update from version 1.0.0 to 1.0.1 and the
+            rolling update experiment.
+        </p>
+	
+	<p>
+    <strong>Finnish Meteorological Institute – Open Data Manual</strong><br>
+
+    <a href="https://en.ilmatieteenlaitos.fi/open-data-manual" target="_blank">
+        https://en.ilmatieteenlaitos.fi/open-data-manual
+    </a><br>
+
+    Used to understand FMI Open Data services and how applications can access
+    meteorological data through public APIs.
+	</p>
+
+
+	<p>
+  	  <strong>Finnish Meteorological Institute – WFS Examples and Guidelines</strong><br>
+
+	    <a href="https://en.ilmatieteenlaitos.fi/open-data-manual-wfs-examples-and-guidelines" target="_blank">
+ 	       https://en.ilmatieteenlaitos.fi/open-data-manual-wfs-examples-and-guidelines
+ 	   </a><br>
+
+	    Used for the public API exercise and to understand how to request weather
+ 	   forecast data using parameters such as temperature and wind speed.
+	</p>
+
+
+	<p>
+  	  <strong>data.europa.eu – Choosing the Right Format for Open Data</strong><br>
+
+ 	   <a href="https://data.europa.eu/elearning/en/module9/" target="_blank">
+    	    https://data.europa.eu/elearning/en/module9/
+   	 </a><br>
+
+  	  Used to understand why data formats are important for open data and the
+   	 differences between formats such as CSV, JSON, XML and documents.
+	</p>
+
+
+	<p>
+ 	   <strong>Kubernetes – Objects in Kubernetes</strong><br>
+
+  	  <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/" target="_blank">
+  	      https://kubernetes.io/docs/concepts/overview/working-with-objects/
+  	  </a><br>
+
+  	  Used to understand Kubernetes objects, YAML manifests and how configuration
+    describes the desired state of resources.
+	</p>
+
+
+	<p>
+   	 <strong>Microsoft Learn – Web Application Firewall Documentation</strong><br>
+
+   	 <a href="https://learn.microsoft.com/en-us/azure/web-application-firewall/" 	target="_blank">
+   	     https://learn.microsoft.com/en-us/azure/web-application-firewall/
+  	  </a><br>
+
+   	 Used to understand what a Web Application Firewall (WAF) is and how it
+  	  protects web applications from common attacks and vulnerabilities.
+	</p>
+
+    </div>
+
+
+    <!-- LIVE VISIT COUNTER -->
+
+    <script>
+        fetch('/api/visits')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('visits').textContent = data.visits;
+            })
+            .catch(error => {
+                document.getElementById('visits').textContent = 'Error';
+                console.error(error);
+            });
+          fetch('/api/weather')
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('temperature').textContent = data.temperature_c;
+        document.getElementById('wind').textContent = data.wind_speed_ms;
+        document.getElementById('weather-time').textContent = data.forecast_time;
+    })
+    .catch(error => {
+        document.getElementById('temperature').textContent = 'Error';
+        document.getElementById('wind').textContent = 'Error';
+        document.getElementById('weather-time').textContent = 'Error';
+        console.error(error);
+    });
+    </script>
+
+</body>
+
+</html>
